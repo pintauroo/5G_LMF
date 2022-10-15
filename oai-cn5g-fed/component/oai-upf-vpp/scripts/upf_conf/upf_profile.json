@@ -1,0 +1,39 @@
+{
+	"capacity": 100,
+	"fqdn": "gw@GW_ID@.vppupf.node.5gcn.mnc@MNC03@.mcc@MCC@.@REALM@",
+	"heartBeatTimer": 10,
+	"ipv4Addresses": ["@N4_IPV4_ADDRESS_LOCAL@"],
+	"json_data": null,
+	"nfInstanceName": "OAI-UPF-VPP",
+	"nfServices": [],
+	"nfStatus": "REGISTERED",
+	"nfType": "UPF",
+	"priority": 1,
+	"sNssais": [{
+		"sd": "@NSSAI_SD_0@",
+		"sst": @SST@
+	}],
+	"upfInfo": {
+		"sNssaiUpfInfoList": [{
+			"dnnUpfInfoList": [{
+				"dnn": "@DNN@"
+			}],
+			"sNssai": {
+				"sd": "@NSSAI_SD_0@",
+				"sst": @SST@
+			}
+		}],
+		"interfaceUpfInfoList": [{
+			"endpointFqdn": "@NWI_N3@",
+			"interfaceType": "N3",
+			"ipv4EndpointAddresses": ["@ACCESS_IPV4@"],
+			"networkInstance": "@NWI_N3@"
+		}, {
+			"endpointFqdn": "@NWI_N6@",
+			"interfaceType": "N6",
+			"ipv4EndpointAddresses": ["@CORE_IPV4@"],
+			"networkInstance": "@NWI_N6@"
+		}]
+
+	}
+}

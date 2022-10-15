@@ -1,0 +1,122 @@
+#/*
+# * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
+# * contributor license agreements.  See the NOTICE file distributed with
+# * this work for additional information regarding copyright ownership.
+# * The OpenAirInterface Software Alliance licenses this file to You under
+# * the OAI Public License, Version 1.1  (the "License"); you may not use this file
+# * except in compliance with the License.
+# * You may obtain a copy of the License at
+# *
+# *      http://www.openairinterface.org/?page_id=698
+# *
+# * Unless required by applicable law or agreed to in writing, software
+# * distributed under the License is distributed on an "AS IS" BASIS,
+# * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# * See the License for the specific language governing permissions and
+# * limitations under the License.
+# *-------------------------------------------------------------------------------
+# * For more information about the OpenAirInterface (OAI) Software Alliance:
+# *      contact@openairinterface.org
+# */
+#---------------------------------------------------------------------
+#
+# Dockerfile for the Open-Air-Interface AUSF service
+#   Valid for RHEL 8.2
+#
+#---------------------------------------------------------------------
+
+#---------------------------------------------------------------------
+# BUILDER IMAGE
+#---------------------------------------------------------------------
+FROM registry.access.redhat.com/ubi8/ubi:latest AS oai-ausf-builder
+
+ARG NEEDED_GIT_PROXY
+
+COPY tmp/ca/redhat-uep.pem /etc/rhsm/ca
+COPY tmp/entitlement/*.pem /etc/pki/entitlement
+
+RUN rm -f /etc/rhsm-host && \
+    yum repolist --disablerepo=* && \
+    subscription-manager repos --enable codeready-builder-for-rhel-8-x86_64-rpms && \
+    yum update -y && \
+    yum install -y \
+        psmisc \
+        git \
+        diffutils \
+        file \
+        gcc-c++ \
+        boost-devel \
+        openssl-devel \
+        openssl \
+        libasan && \
+    echo "/usr/local/lib" > /etc/ld.so.conf.d/local-lib.conf && \
+    echo "/usr/local/lib64" >> /etc/ld.so.conf.d/local-lib.conf
+
+# Some GIT configuration command quite useful
+RUN /bin/bash -c "if [[ -v NEEDED_GIT_PROXY ]]; then git config --global http.proxy $NEEDED_GIT_PROXY; fi"
+RUN git config --global https.postBuffer 123289600 && \
+    git config --global http.sslverify false
+
+# Copying source code
+WORKDIR /openair-ausf
+COPY . /openair-ausf
+
+# Installing and Building AUSF
+WORKDIR /openair-ausf/build/scripts
+RUN ./build_ausf --install-deps --force
+RUN ./build_ausf --clean --Verbose --build-type Release --jobs && \
+    ldd /openair-ausf/build/ausf/build/ausf && \
+    mv /openair-ausf/build/ausf/build/ausf /openair-ausf/build/ausf/build/oai_ausf
+
+#---------------------------------------------------------------------
+# TARGET IMAGE
+#---------------------------------------------------------------------
+FROM registry.access.redhat.com/ubi8/ubi:latest as oai-ausf
+ENV TZ=Europe/Paris
+# We install some debug tools for the moment in addition of mandatory libraries
+RUN yum update -y && \
+    yum install -y --enablerepo="ubi-8-codeready-builder" \
+      tzdata \
+      procps-ng \
+      psmisc \
+      net-tools \
+      nettle \
+      libubsan \
+      libasan \
+      liblsan \
+      libevent && \
+    yum clean all -y && \
+    rm -rf /var/cache/yum && \
+    echo "/usr/local/lib" > /etc/ld.so.conf.d/local-lib.conf && \
+    echo "/usr/local/lib64" >> /etc/ld.so.conf.d/local-lib.conf
+
+# Copying executable and generated libraries
+WORKDIR /openair-ausf/bin
+COPY --from=oai-ausf-builder \
+    /openair-ausf/build/ausf/build/oai_ausf \
+    /openair-ausf/scripts/entrypoint.sh \
+    ./
+
+WORKDIR /usr/local/lib64
+COPY --from=oai-ausf-builder \
+    /usr/local/lib64/libpistache.so.0 \
+    /lib64/libboost_system.so.1.66.0 \
+    /lib64/libboost_thread.so.1.66.0 \
+    /lib64/libboost_date_time.so.1.66.0 \
+    /lib64/libconfig++.so.9 \
+    /lib64/libnghttp2.so.14 \
+    /usr/local/lib/libnghttp2_asio.so.1 \
+    ./
+
+RUN ldconfig -v && \
+    ldd /openair-ausf/bin/oai_ausf
+
+WORKDIR /openair-ausf/etc
+COPY --from=oai-ausf-builder /openair-ausf/etc/ausf.conf .
+
+WORKDIR /openair-ausf
+
+EXPOSE 80/tcp
+
+ENTRYPOINT ["/bin/bash","/openair-ausf/bin/entrypoint.sh"]
+CMD ["/openair-ausf/bin/oai_ausf", "-c" , "/openair-ausf/etc/ausf.conf", "-o"]

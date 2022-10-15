@@ -1,0 +1,127 @@
+#/*
+# * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
+# * contributor license agreements.  See the NOTICE file distributed with
+# * this work for additional information regarding copyright ownership.
+# * The OpenAirInterface Software Alliance licenses this file to You under
+# * the OAI Public License, Version 1.1  (the "License"); you may not use this file
+# * except in compliance with the License.
+# * You may obtain a copy of the License at
+# *
+# *      http://www.openairinterface.org/?page_id=698
+# *
+# * Unless required by applicable law or agreed to in writing, software
+# * distributed under the License is distributed on an "AS IS" BASIS,
+# * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# * See the License for the specific language governing permissions and
+# * limitations under the License.
+# *-------------------------------------------------------------------------------
+# * For more information about the OpenAirInterface (OAI) Software Alliance:
+# *      contact@openairinterface.org
+# */
+#---------------------------------------------------------------------
+#
+# Dockerfile for the VPP-UPF service
+#   Valid for Ubuntu-18.04 (bionic)
+#
+#---------------------------------------------------------------------
+#---------------------------------------------------------------------
+# BUILDER IMAGE
+#---------------------------------------------------------------------
+
+FROM ubuntu:18.04 AS vpp-upf-builder
+
+ARG NEEDED_GIT_PROXY
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Installing hyperscan library for upf plugin
+RUN apt update && \
+    DEBIAN_FRONTEND=noninteractive apt-get upgrade --yes && \
+    DEBIAN_FRONTEND=noninteractive apt-get install --yes \
+        git \
+        sudo \
+        python3 \
+        wget \
+        make \
+        build-essential \
+        libhyperscan-dev \
+  && rm -rf /var/lib/apt/lists/*
+
+
+# Some GIT configuration commands quite useful
+RUN /bin/bash -c "if [[ -v NEEDED_GIT_PROXY ]]; then git config --global http.proxy $NEEDED_GIT_PROXY; fi"
+RUN git config --global https.postBuffer 123289600 && \
+    git config --global http.sslverify false
+
+WORKDIR /vpp-upf
+COPY . .
+
+# Applying vpp patches
+RUN git clone -b stable/2101 https://github.com/fdio/vpp.git && \
+    git clone -b stable/1.2 https://github.com/travelping/upg-vpp.git && \
+    cd upg-vpp && \
+    cd .. && \
+    mv upg-vpp/upf/ vpp/src/plugins/ && \
+    mv upg-vpp/vpp-patches/* scripts/patches/ && \
+    mv upg-vpp/vpp.spec / && \
+    ./scripts/apply_vpp_patches.sh && \
+    touch /etc/apt/apt.conf.d/90forceyes && \
+    echo  "APT::Get::Assume-Yes "true";" >> /etc/apt/apt.conf.d/90forceyes && \
+    echo  "APT::Get::force-yes "true";" >> /etc/apt/apt.conf.d/90forceyes
+
+# To Do - remove unnecessary pulgin build to optimise build time e.g. ipsec, dpdk etc.
+
+# Build vpp with travelping upf plugin
+RUN make install-dep build-release -C vpp
+
+#---------------------------------------------------------------------
+# TARGET IMAGE
+#---------------------------------------------------------------------
+FROM ubuntu:bionic as oai-upf-vpp
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=Europe/Paris
+
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get upgrade --yes && \
+    DEBIAN_FRONTEND=noninteractive apt-get install --yes \
+        net-tools \
+        tshark \
+        tzdata\
+        openssl \
+        libhyperscan-dev \
+        iproute2 \
+        iputils-ping \
+        vim \
+        python \
+        python-pip \
+        libcurl4-openssl-dev \
+        libssl-dev \
+        libnuma1 \
+  && rm -rf /var/lib/apt/lists/*
+RUN pip install pycurl termcolor
+
+WORKDIR /openair-upf/bin
+COPY --from=vpp-upf-builder /vpp-upf/scripts/entrypoint.sh .
+COPY --from=vpp-upf-builder /vpp-upf/vpp/build-root/install-vpp-native/vpp/bin/vpp .
+COPY --from=vpp-upf-builder /vpp-upf/vpp/build-root/install-vpp-native/vpp/bin/vppctl .
+COPY --from=vpp-upf-builder /vpp-upf/src/nrf_client.py .
+
+WORKDIR /openair-upf/etc
+COPY --from=vpp-upf-builder /vpp-upf/scripts/upf_conf/init.conf .
+COPY --from=vpp-upf-builder /vpp-upf/scripts/upf_conf/startup_debug.conf .
+COPY --from=vpp-upf-builder /vpp-upf/scripts/upf_conf/upf_profile.json .
+
+WORKDIR /usr/lib/x86_64-linux-gnu/
+COPY --from=vpp-upf-builder /vpp-upf/vpp/build-root/install-vpp-native/vpp/lib/ .
+
+RUN ldconfig
+
+RUN groupadd vpp
+
+WORKDIR /openair-upf
+COPY --from=vpp-upf-builder /vpp-upf/scripts/run.sh  .
+
+#expose
+EXPOSE 8085/udp 2152/udp
+
+ENTRYPOINT ["/openair-upf/bin/entrypoint.sh"]
+CMD ["/openair-upf/run.sh"]

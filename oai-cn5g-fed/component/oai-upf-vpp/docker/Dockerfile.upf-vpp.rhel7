@@ -1,0 +1,129 @@
+#/*
+# * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
+# * contributor license agreements.  See the NOTICE file distributed with
+# * this work for additional information regarding copyright ownership.
+# * The OpenAirInterface Software Alliance licenses this file to You under
+# * the OAI Public License, Version 1.1  (the "License"); you may not use this file
+# * except in compliance with the License.
+# * You may obtain a copy of the License at
+# *
+# *      http://www.openairinterface.org/?page_id=698
+# *
+# * Unless required by applicable law or agreed to in writing, software
+# * distributed under the License is distributed on an "AS IS" BASIS,
+# * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# * See the License for the specific language governing permissions and
+# * limitations under the License.
+# *-------------------------------------------------------------------------------
+# * For more information about the OpenAirInterface (OAI) Software Alliance:
+# *      contact@openairinterface.org
+# */
+#---------------------------------------------------------------------
+#
+# Dockerfile for the VPP-UPG service
+#   Valid for RHEL 8.2
+#
+#---------------------------------------------------------------------
+
+#---------------------------------------------------------------------
+# BUILDER IMAGE
+#---------------------------------------------------------------------
+FROM registry.access.redhat.com/ubi7/ubi:latest AS vpp-upf-builder
+
+ARG NEEDED_GIT_PROXY
+
+COPY tmp/ca/redhat-uep.pem /etc/rhsm/ca
+COPY tmp/entitlement/*.pem /etc/pki/entitlement
+
+RUN rm -f /etc/rhsm-host && \
+    subscription-manager repos --enable rhel-server-rhscl-7-rpms && \
+    subscription-manager repos --enable rhel-7-server-optional-rpms && \
+    yum update -y && \
+    yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm &&\
+    yum install -y \
+        python3 \
+        psmisc \
+        git \
+        make \
+        patch \
+        sudo \
+        wget && \
+	rm -rf /var/lib/apt/lists/*
+
+# Some GIT configuration command quite useful
+RUN /bin/bash -c "if [[ -v NEEDED_GIT_PROXY ]]; then git config --global http.proxy $NEEDED_GIT_PROXY; fi"
+RUN git config --global https.postBuffer 123289600 && \
+    git config --global http.sslverify false
+
+RUN wget http://repo.openfusion.net/centos7-x86_64/hyperscan-devel-5.3.0-1.of.el7.x86_64.rpm \
+         http://repo.openfusion.net/centos7-x86_64/hyperscan-5.3.0-1.of.el7.x86_64.rpm \ 
+         && rpm -i *.rpm
+
+WORKDIR /vpp-upf
+COPY . .
+
+# Applying vpp patches
+RUN git clone -b stable/2101 https://github.com/fdio/vpp.git && \
+    git clone -b stable/1.2 https://github.com/travelping/upg-vpp.git && \
+    cd upg-vpp && \
+    cd .. && \
+    mv upg-vpp/upf/ vpp/src/plugins/ && \
+    mv upg-vpp/vpp-patches/* scripts/patches/ && \
+    mv upg-vpp/vpp.spec / && \
+    ./scripts/apply_vpp_patches.sh
+
+RUN make install-dep build-release -C vpp/
+
+#---------------------------------------------------------------------
+# TARGET IMAGE
+#---------------------------------------------------------------------
+FROM registry.access.redhat.com/ubi7/ubi:latest as oai-upf-vpp
+ENV TZ=Europe/Paris
+
+# We install some debug tools for the moment in addition of mandatory libraries
+RUN yum repolist --disablerepo=* && \
+    yum update -y && \
+    yum install -y \
+      net-tools \
+      iputils \
+      tshark \
+      tzdata\
+      iproute \
+      numactl-devel \
+      wget \
+      https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm && \
+    wget http://repo.openfusion.net/centos7-x86_64/hyperscan-devel-5.3.0-1.of.el7.x86_64.rpm \
+         http://repo.openfusion.net/centos7-x86_64/hyperscan-5.3.0-1.of.el7.x86_64.rpm && \
+    rpm -i *.rpm && \
+    rm *.rpm && \
+    yum remove -y wget && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN yum install -y python-pip && pip install termcolor
+
+WORKDIR /openair-upf/bin
+COPY --from=vpp-upf-builder /vpp-upf/scripts/entrypoint.sh .
+COPY --from=vpp-upf-builder /vpp-upf/vpp/build-root/install-vpp-native/vpp/bin/vpp .
+COPY --from=vpp-upf-builder /vpp-upf/vpp/build-root/install-vpp-native/vpp/bin/vppctl .
+COPY --from=vpp-upf-builder /vpp-upf/src/nrf_client.py .
+
+WORKDIR /openair-upf/etc
+COPY --from=vpp-upf-builder /vpp-upf/scripts/upf_conf/init.conf .
+COPY --from=vpp-upf-builder /vpp-upf/scripts/upf_conf/startup_debug.conf .
+COPY --from=vpp-upf-builder /vpp-upf/scripts/upf_conf/upf_profile.json .
+
+WORKDIR /usr/lib64
+COPY --from=vpp-upf-builder /vpp-upf/vpp/build-root/install-vpp-native/vpp/lib/ .
+
+RUN ldconfig
+
+RUN groupadd vpp
+
+WORKDIR /openair-upf
+COPY --from=vpp-upf-builder /vpp-upf/scripts/run.sh  .
+
+#expose
+EXPOSE 8085/udp 2152/udp
+
+ENTRYPOINT ["/openair-upf/bin/entrypoint.sh"]
+CMD ["/openair-upf/run.sh"]

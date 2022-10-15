@@ -1,0 +1,4 @@
+{
+    "modelPackage"   : "oai.ausf.model",
+    "apiPackage"     : "oai.ausf.api"
+}

@@ -1,0 +1,47 @@
+version: '3.8'
+services:
+    gnbsim-vpp:
+        container_name: gnbsim-vpp
+        image: gnbsim:latest
+        privileged: true
+        environment:
+            - MCC=208
+            - MNC=95
+            - GNBID=5
+            - TAC=0x00a000
+            - SST=222
+            - SD=00007b
+            - PagingDRX=v32
+            - RANUENGAPID=0
+            - IMEISV=35609204079514
+            - MSIN=0000000031
+            - RoutingIndicator=1234
+            - ProtectionScheme=null
+            - KEY=0C0A34601D4F07677303652C0462535B
+            - OPc=63bfa50ee6523365ff14c1f45f88737d
+            - DNN=default
+            - URL=http://www.asnt.org:8080/
+            - NRCellID=1
+            - USE_FQDN=no
+#           - USE_FQDN=yes
+#           - AMF_FQDN=amf.oai-5gc.eur
+            - NGAPPeerAddr=192.168.70.132
+            - GTPuLocalAddr=192.168.72.141
+            - GTPuIFname=eth1
+        networks:
+            public_net:
+                ipv4_address: 192.168.70.141
+            public_net_access:
+                ipv4_address: 192.168.72.141
+        healthcheck:
+            test: /bin/bash -c "ifconfig gtp-gnb"
+            interval: 10s
+            timeout: 5s
+            retries: 5
+networks:
+    public_net:
+        external:
+            name: demo-oai-public-net
+    public_net_access:
+        external:
+            name: oai-public-access

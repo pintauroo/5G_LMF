@@ -1,0 +1,15 @@
+--- a/Makefile	2021-06-03 13:13:38.123080239 +0200
++++ b/Makefile	2021-06-03 13:15:58.138016487 +0200
+@@ -279,9 +279,9 @@
+ else ifneq ("$(wildcard /etc/redhat-release)","")
+ ifeq ($(OS_ID),rhel)
+ 	@sudo -E yum-config-manager --enable rhel-server-rhscl-7-rpms
+-	@sudo -E yum groupinstall $(CONFIRM) $(RPM_DEPENDS_GROUPS)
+-	@sudo -E yum install $(CONFIRM) $(RPM_DEPENDS)
+-	@sudo -E debuginfo-install $(CONFIRM) glibc openssl-libs mbedtls-devel zlib
++	@sudo -E yum groupinstall -y $(RPM_DEPENDS_GROUPS)
++	@sudo -E yum install -y $(RPM_DEPENDS)
++	@sudo -E debuginfo-install -y glibc openssl-libs mbedtls-devel zlib
+ else ifeq ($(OS_ID)-$(OS_VERSION_ID),centos-8)
+ 	@sudo -E dnf install $(CONFIRM) dnf-plugins-core epel-release
+ 	@sudo -E dnf config-manager --set-enabled \

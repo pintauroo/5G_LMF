@@ -1,0 +1,273 @@
+#!/bin/groovy
+/*
+ * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The OpenAirInterface Software Alliance licenses this file to You under
+ * the OAI Public License, Version 1.1  (the "License"); you may not use this file
+ * except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.openairinterface.org/?page_id=698
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *-------------------------------------------------------------------------------
+ * For more information about the OpenAirInterface (OAI) Software Alliance:
+ *      contact@openairinterface.org
+ */
+
+//-------------------------------------------------------------------------------
+
+// Location of the CN executor node
+def cn_ci_host = params.Host_CN_CI_Server
+
+// for lock
+def cn_ci_resource = params.DockerContainers
+def ds_tester_ci_resource = params.DsTester
+
+// Location of the 2nd CN executor
+def new_host_flag = false
+def new_host = ""
+def new_host_user = ""
+
+// Location of the CN tester
+def dsT_host_flag = false
+def dsT_host = ""
+def dsT_host_user = ""
+def dsT_host_ip_addr = ""
+
+// dsTester tag to use
+def dsTesterTag = params.DSTESTER_TAG
+
+// Flags
+def scmEvent = false
+def upstreamEvent = false
+def deployed = true
+
+// Default tag  --> could be passed on by upstream job or by PR content
+def nrfTag = params.nrfTag
+
+//-------------------------------------------------------------------------------
+// Pipeline start
+pipeline {
+  agent {
+    label cn_ci_host
+  }
+  options {
+    disableConcurrentBuilds()
+    timestamps()
+    ansiColor('xterm')
+    lock(cn_ci_resource)
+  }
+  stages {
+    stage ('Verify Parameters') {
+      steps {
+        script {
+          echo '\u2705 \u001B[32mVerify Parameters\u001B[0m'
+
+          JOB_TIMESTAMP = sh returnStdout: true, script: 'date --utc --rfc-3339=seconds | sed -e "s#+00:00##"'
+          JOB_TIMESTAMP = JOB_TIMESTAMP.trim()
+
+          if (params.Host_CN_CI_2nd_Server_Flag != null) {
+            new_host_flag = params.Host_CN_CI_2nd_Server_Flag
+            if (new_host_flag) {
+              new_host = params.Host_CN_CI_2nd_Server
+              new_host_user = params.Host_CN_CI_2nd_Server_Login
+              echo "1st Node   is ${NODE_NAME}"
+              echo "2nd Node   is ${new_host}"
+            } else {
+              echo "Node       is ${NODE_NAME}"
+            }
+          } else {
+            echo "Node       is ${NODE_NAME}"
+          }
+          if (params.DS_Tester_Server_Flag != null) {
+            dsT_host_flag = params.DS_Tester_Server_Flag
+            if (dsT_host_flag) {
+              def allParametersPresent = true
+              if (params.DS_Tester_Server_Name == null) {
+                allParametersPresent = false
+              } else {
+                dsT_host = params.DS_Tester_Server_Name
+              }
+              if (params.DS_Tester_Server_Login == null) {
+                allParametersPresent = false
+              } else {
+                dsT_host_user = params.DS_Tester_Server_Login
+              }
+              if (params.DS_Tester_Server_IP_Addr == null) {
+                allParametersPresent = false
+              } else {
+                dsT_host_ip_addr = params.DS_Tester_Server_IP_Addr
+              }
+              if (allParametersPresent) {
+                echo "DS Tester  is on ${dsT_host}"
+              } else {
+                echo "Some DS Tester parameters are missing!"
+                sh "./ci-scripts/fail.sh"
+              }
+            }
+          }
+
+          // Find out the cause of the trigger
+          for (cause in currentBuild.getBuildCauses()) {
+            if (cause.toString() ==~ /.*UpstreamCause.*/) {
+              upstreamEvent = true
+            //} else {
+            //  scmEvent = true
+            }
+          }
+          if (upstreamEvent) {
+            if (params.NRF_TAG != null) {
+              nrfTag = params.NRF_TAG
+              echo "Upstream Job passed NRF_TAG to use: ${nrfTag}"
+            }
+            sh "git clean -x -d -f > /dev/null 2>&1"
+            sh "git fetch --prune > /dev/null 2>&1"
+          }
+          sh "mkdir -p archives DS-TEST-RESULTS"
+          // Verify that the images are available
+          try {
+            sh 'echo "OAI_NRF_TAG: oai-nrf:' + nrfTag +'" > archives/oai_nrf_image_info.log'
+            sh 'docker image inspect --format=\'Size = {{.Size}} bytes\' oai-nrf:' + nrfTag + ' >> archives/oai_nrf_image_info.log'
+            sh 'docker image inspect --format=\'Date = {{.Created}}\' oai-nrf:' + nrfTag + ' >> archives/oai_nrf_image_info.log'
+          } catch (Exception e) {
+            error "OAI NRF Image tag to test does not exist!"
+          }
+        }
+      }
+    }
+    stage ('Deploy NRF-U18') {
+      steps {
+        script {
+          echo '\u2705 \u001B[32mDeploy NRF using Docker-Compose\u001B[0m'
+          // Prepare all needed files for docker-compose
+          // First put all correct tags to test
+          sh 'sed -e "s#NRF_IMAGE_TAG#' + nrfTag + '#" ci-scripts/dsTesterDockerCompose/docker-compose.tplt > ci-scripts/dsTesterDockerCompose/docker-compose.yml'
+          dir('ci-scripts/dsTesterDockerCompose') {
+            sh 'docker-compose up -d  > ../../archives/compose_nrf_up.log 2>&1'
+            sh 'sleep 60'
+            // Do a check on number of healthy containers
+            // 1 == nrf
+            ret = sh returnStdout: true, script: 'docker-compose ps -a | grep -v unhealthy | grep -c healthy || true'
+            ret = ret.trim()
+            if (ret != '1') {
+              error "Deployment went wrong!"
+            }          
+          }
+        }
+      }
+      post {
+        always {
+          script {
+            // Do docker logs to recover the configuration results
+            try {
+              sh 'docker inspect --format=\'STATUS: {{.State.Health.Status}}\' cicd-oai-nrf > archives/nrf_config.log'
+            } catch (Exception e) {
+              sh 'echo "STATUS: KO" >> archives/nrf_config.log'
+            }
+          }
+        }
+        success {
+          script {
+            sh 'echo "DEPLOYMENT: OK" > archives/deployment_status.log'
+            sh 'python3 ./ci-scripts/routeCheck.py --mode=Add --userName=' + dsT_host_user + ' --hostName=' + dsT_host
+          }
+        }
+        unsuccessful {
+          script {
+            sh 'echo "DEPLOYMENT: KO" > archives/deployment_status.log'
+            deployed = false
+          }
+        }
+      }
+    }
+    stage ('Bracket Testing with dsTester') {
+      when { expression {dsT_host_flag} }
+      steps {
+        lock (ds_tester_ci_resource) {
+          script {
+            echo '\u2705 \u001B[32mTesting with DS Tester\u001B[0m'
+            if (fileExists("dstester")) {
+              sh "rm -Rf dstester > /dev/null 2>&1"
+            }
+            sh "mkdir -p dstester"
+            dir ('dstester') {
+              withCredentials([
+                [$class: 'UsernamePasswordMultiBinding', credentialsId: "${params.dsTesterGitLabRepository_Credentials}", usernameVariable: 'git_username', passwordVariable: 'git_token']
+              ]) {
+                sh "git clone https://${git_username}:${git_token}@github.com/OPENAIRINTERFACE/chasseur.git . > ../git_clone.log 2>&1"
+                sh "git checkout -f " + dsTesterTag + " >> ../git_clone.log 2>&1"
+                dir ('jenkins') {
+                  try {
+                    sh "python3 ./dogmatix-agent.py -f ./suits/dc/nrf-bracket.yaml -d true | tee ../../DS-TEST-RESULTS/dsTester_Summary.txt"
+                  } catch (Exception e) {
+                    currentBuild.result = 'FAILURE'
+                    echo "dsTester Running FAILED"
+                  }
+                }
+              }
+            }
+            sh "python3 ./ci-scripts/toCheckDSTesterResult.py"
+          }  
+        }
+      }
+      post {
+        always {
+          script {
+            // Copy the pcap and log from the container
+            sh "mkdir -p archives/pcaps archives/logs"
+            try {
+              sh 'docker cp cicd-oai-nrf:/tmp/nrf.pcap archives/pcaps/oai_nrf.pcap'
+              sh 'docker cp cicd-oai-nrf:/tmp/nrf.log archives/logs/oai_nrf.log'
+            } catch (Exception e) {
+              sh 'echo "Error in copying pcap & log from the container"'
+            }
+          }
+        }
+      }
+    }
+    stage ('Undeploy NRF') {
+      steps {
+        script {
+          echo '\u2705 \u001B[32mUn-Deploy NRF\u001B[0m'
+          sh 'python3 ./ci-scripts/routeCheck.py --mode=Delete --userName=' + dsT_host_user + ' --hostName=' + dsT_host
+          dir('ci-scripts/dsTesterDockerCompose') {
+            sh 'docker-compose down > ../../archives/compose_normal_down.log 2>&1'
+          }
+        }
+      }
+    }
+  }
+  post {
+    always {
+      script {
+        // Get logs if deployment fails
+        if (deployed != true) {
+        sh 'mkdir -p archives/logs'
+        sh 'docker logs cicd-oai-nrf > archives/logs/oai_nrf.log'
+        }
+        // Remove any leftover containers/networks
+        sh 'python3 ./ci-scripts/routeCheck.py --mode=Delete --userName=' + dsT_host_user + ' --hostName=' + dsT_host
+        dir('ci-scripts/dsTesterDockerCompose') {
+          sh 'docker-compose down > ../../archives/compose_l_down.log 2>&1'
+        }
+        // Generating the HTML report
+        sh 'python3 ./ci-scripts/bracketTestHTMLReport.py --job_name=' + JOB_NAME + ' --job_id=' + BUILD_ID + ' --job_url=' + BUILD_URL
+
+        // Zipping all archived log files
+        sh "zip -r -qq cn5g_nrf_docker_bt_logs.zip archives DS-TEST-RESULTS"
+        if (fileExists('cn5g_nrf_docker_bt_logs.zip')) {
+          archiveArtifacts artifacts: 'cn5g_nrf_docker_bt_logs.zip'
+        }
+        if (fileExists('test_results_oai_nrf_bt.html')) {
+          archiveArtifacts artifacts: 'test_results_oai_nrf_bt.html'
+        }
+      }
+    }
+  }
+}

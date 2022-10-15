@@ -1,0 +1,14 @@
+--- a/src/CMakeLists.txt        2020-04-12 19:33:54.160008000 +0000
++++ b/src/CMakeLists.txt        2020-04-12 19:35:51.608027000 +0000
+
+@@ -53,7 +53,7 @@
+ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+
+ if (CMAKE_BUILD_TYPE)
+-  set(CMAKE_C_FLAGS "-g -fPIC -Werror -Wall ${CMAKE_C_FLAGS}")
++  set(CMAKE_C_FLAGS "-g -fPIC -Wall ${CMAKE_C_FLAGS}")
+ endif()
+
+ if (compiler_flag_no_address_of_packed_member)
+
+

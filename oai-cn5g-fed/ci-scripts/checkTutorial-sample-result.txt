@@ -1,0 +1,258 @@
+-------- When it pass -----------------
+
+ 1. Pre-requisites
+ Executing command "rm -rf /tmp/oai/static-ue-ip"
+ Executing command "mkdir -p /tmp/oai/static-ue-ip"
+ 2. Configuring the OAI-5G Core Network Functions
+ Executing command "sed -i 's/USE_LOCAL_SUBSCRIPTION_INFO=yes/USE_LOCAL_SUBSCRIPTION_INFO=no/g' docker-compose-basic-nrf.yaml"
+ Executing command "sed -i 's/SMF_SELECTION=yes/SMF_SELECTION=no/g' docker-compose-basic-nrf.yaml"
+ 3. Deploying OAI 5g Core Network
+ Executing command "python3 core-network.py --type start-basic --fqdn yes --scenario 1"
+[2022-01-06 12:11:20,181] root:DEBUG:  Starting 5gcn components... Please wait....
+Creating network "demo-oai-public-net" with driver "bridge"
+Creating mysql   ... done
+Creating oai-nrf ... done
+Creating oai-udr ... done
+Creating oai-udm ... done
+Creating oai-ausf ... done
+Creating oai-amf  ... done
+Creating oai-smf  ... done
+Creating oai-spgwu ... done
+Creating oai-ext-dn ... done
+[2022-01-06 12:12:03,096] root:DEBUG:  OAI 5G Core network started, checking the health status of the containers... takes few secs....
+[2022-01-06 12:13:15,941] root:DEBUG:  All components are healthy, please see below for more details....
+[2022-01-06 12:13:15,941] root:DEBUG:  Checking if the containers are configured....
+[2022-01-06 12:13:15,941] root:DEBUG:  Checking if AMF, SMF and UPF registered with nrf core network....
+[2022-01-06 12:13:16,475] root:DEBUG:  For example: oai-smf Registration with oai-nrf can be checked on this url /nnrf-nfm/v1/nf-instances?nf-type="SMF" {"_links":{"item":[{"href":"192.168.70.133"}],"self":""}}....
+[2022-01-06 12:13:16,475] root:DEBUG:  AMF, SMF and UPF are registered to NRF....
+[2022-01-06 12:13:16,475] root:DEBUG:  Checking if SMF is able to connect with UPF....
+[2022-01-06 12:13:16,586] root:DEBUG:  UPF did answer to N4 Association request from SMF....
+[2022-01-06 12:13:16,618] root:DEBUG:  SMF receiving heathbeats from UPF....
+[2022-01-06 12:13:16,618] root:DEBUG:  OAI 5G Core network is configured and healthy....
+
+
+Name                 Command                  State                  Ports            
+
+-----------------------------------------------------------------------------------------
+
+mysql        docker-entrypoint.sh mysqld      Up (healthy)   3306/tcp, 33060/tcp         
+
+oai-amf      /bin/bash /openair-amf/bin ...   Up (healthy)   38412/sctp, 80/tcp, 9090/tcp
+
+oai-ausf     /bin/bash /openair-ausf/bi ...   Up (healthy)   80/tcp                      
+
+oai-ext-dn   /bin/bash -c  apt update;  ...   Up                                         
+
+oai-nrf      /bin/bash /openair-nrf/bin ...   Up (healthy)   80/tcp, 9090/tcp            
+
+oai-smf      /bin/bash /openair-smf/bin ...   Up (healthy)   80/tcp, 8805/udp, 9090/tcp  
+
+oai-spgwu    /openair-spgwu-tiny/bin/en ...   Up (healthy)   2152/udp, 8805/udp          
+
+oai-udm      /bin/bash /openair-udm/bin ...   Up (healthy)   80/tcp                      
+
+oai-udr      /bin/bash /openair-udr/bin ...   Up (healthy)   80/tcp
+
+ 4. Deploying RAN Emulator
+ Executing command "docker-compose -f docker-compose-gnbsim.yaml up -d gnbsim"
+WARNING: Found orphan containers (oai-ausf, mysql, oai-amf, oai-smf, oai-spgwu, oai-udm, oai-nrf, oai-udr, oai-ext-dn) for this project. If you removed or renamed this service in your compose file, you can run this command with the --remove-orphans flag to clean it up.
+Creating gnbsim ... done
+ Executing command "sleep 5"
+ Executing command "docker exec -it oai-ext-dn ping 12.1.1.4 -c4"
+PING 12.1.1.4 (12.1.1.4) 56(84) bytes of data.
+
+                                              64 bytes from 12.1.1.4: icmp_seq=1 ttl=63 time=6.31 ms
+
+                                                                                                    64 bytes from 12.1.1.4: icmp_seq=2 ttl=63 time=0.480 ms
+
+                                                                                                                                                           
+                                                                                                                                                                                                    
+                                                      --- 12.1.1.4 ping statistics ---
+
+                                                                                      4 packets transmitted, 4 received, 0% packet loss, time 3048ms                                                                                                                                                      "
+ Executing command "docker logs oai-smf > /tmp/oai/static-ue-ip/smf.log 2>&1"
+ Executing command "docker logs oai-nrf > /tmp/oai/static-ue-ip/nrf.log 2>&1"
+ Executing command "docker logs oai-spgwu > /tmp/oai/static-ue-ip/spgwu.log 2>&1"
+ Executing command "docker logs oai-udr > /tmp/oai/static-ue-ip/udr.log 2>&1"
+ Executing command "docker logs oai-udm > /tmp/oai/static-ue-ip/udm.log 2>&1"
+ Executing command "docker logs oai-ausf > /tmp/oai/static-ue-ip/ausf.log 2>&1"
+ Executing command "docker logs gnbsim > /tmp/oai/static-ue-ip/gnbsim.log 2>&1"
+ Executing command "docker-compose -f docker-compose-gnbsim.yaml down"
+Stopping gnbsim ... done
+WARNING: Found orphan containers (oai-nrf, oai-spgwu, oai-udm, oai-ext-dn, oai-amf, oai-udr, oai-smf, mysql, oai-ausf) for this project. If you removed or renamed this service in your compose file, you can run this command with the --remove-orphans flag to clean it up.
+Removing gnbsim ... done
+Network demo-oai-public-net is external, skipping
+ Executing command "python3 core-network.py --type stop-basic --fqdn yes --scenario 1"
+[2022-01-06 12:14:29,402] root:DEBUG:  UnDeploying OAI 5G core components....
+Stopping oai-ext-dn ... done
+Stopping oai-spgwu  ... done
+Stopping oai-smf    ... done
+Stopping oai-amf    ... done
+Stopping oai-ausf   ... done
+Stopping oai-udm    ... done
+Stopping oai-udr    ... done
+Stopping oai-nrf    ... done
+Stopping mysql      ... done
+Removing oai-ext-dn ... done
+Removing oai-spgwu  ... done
+Removing oai-smf    ... done
+Removing oai-amf    ... done
+Removing oai-ausf   ... done
+Removing oai-udm    ... done
+Removing oai-udr    ... done
+Removing oai-nrf    ... done
+Removing mysql      ... done
+Removing network demo-oai-public-net
+[2022-01-06 12:15:59,585] root:DEBUG:  OAI 5G core components are UnDeployed....
+
+
+ 5. Reference logs
+
+Final result for the tutorial DEPLOY_SA5G_BASIC_STATIC_UE_IP.md is PASS
+Command execution summary:
+rm -rf /tmp/oai/static-ue-ip:PASS
+mkdir -p /tmp/oai/static-ue-ip:PASS
+sed -i 's/USE_LOCAL_SUBSCRIPTION_INFO=yes/USE_LOCAL_SUBSCRIPTION_INFO=no/g' docker-compose-basic-nrf.yaml: PASS
+sed -i 's/SMF_SELECTION=yes/SMF_SELECTION=no/g' docker-compose-basic-nrf.yaml: PASS
+python3 core-network.py --type start-basic --fqdn yes --scenario 1: PASS
+docker-compose -f docker-compose-gnbsim.yaml up -d gnbsim: PASS
+sleep 5:PASS
+docker exec -it oai-ext-dn ping 12.1.1.4 -c4:PASS
+docker logs oai-amf > /tmp/oai/static-ue-ip/amf.log 2>&1: PASS
+docker logs oai-smf > /tmp/oai/static-ue-ip/smf.log 2>&1: PASS
+docker logs oai-nrf > /tmp/oai/static-ue-ip/nrf.log 2>&1: PASS
+docker logs oai-spgwu > /tmp/oai/static-ue-ip/spgwu.log 2>&1: PASS
+docker logs oai-udr > /tmp/oai/static-ue-ip/udr.log 2>&1: PASS
+docker logs oai-udm > /tmp/oai/static-ue-ip/udm.log 2>&1: PASS
+docker logs oai-ausf > /tmp/oai/static-ue-ip/ausf.log 2>&1: PASS
+docker logs gnbsim > /tmp/oai/static-ue-ip/gnbsim.log 2>&1: PASS
+docker-compose -f docker-compose-gnbsim.yaml down:PASS
+python3 core-network.py --type stop-basic --fqdn yes --scenario 1: PASS
+
+ 
+------------ When it failes ------------
+ 1. Pre-requisites
+ Executing command "rm -rf /tmp/oai/static-ue-ip"
+ Executing command "mkdir -p /tmp/oai/static-ue-ip"
+ 2. Configuring the OAI-5G Core Network Functions
+ Executing command "sed -i 's/USE_LOCAL_SUBSCRIPTION_INFO=yes/USE_LOCAL_SUBSCRIPTION_INFO=no/g' docker-compose-basic-nrf.yaml"
+ Executing command "sed -i 's/SMF_SELECTION=yes/SMF_SELECTION=no/g' docker-compose-basic-nrf.yaml"
+ 3. Deploying OAI 5g Core Network
+ Executing command "python3 core-network.py --type start-basic --fqdn yes --scenario 1"
+[2022-01-06 11:57:30,009] root:DEBUG:  Starting 5gcn components... Please wait....
+Creating network "demo-oai-public-net" with driver "bridge"
+Creating oai-nrf ... done
+Creating mysql   ... done
+Creating oai-udr ... done
+Creating oai-udm ... done
+Creating oai-ausf ... done
+Creating oai-amf  ... done
+Creating oai-smf  ... done
+Creating oai-spgwu ... done
+Creating oai-ext-dn ... done
+[2022-01-06 11:58:12,974] root:DEBUG:  OAI 5G Core network started, checking the health status of the containers... takes few secs....
+[2022-01-06 11:59:08,995] root:DEBUG:  All components are healthy, please see below for more details....
+[2022-01-06 11:59:08,995] root:DEBUG:  Checking if the containers are configured....
+[2022-01-06 11:59:08,996] root:DEBUG:  Checking if AMF, SMF and UPF registered with nrf core network....
+[2022-01-06 11:59:09,045] root:DEBUG:  For example: oai-smf Registration with oai-nrf can be checked on this url /nnrf-nfm/v1/nf-instances?nf-type="SMF" {"_links":{"item":[{"href":"192.168.70.133"}],"self":""}}....
+[2022-01-06 11:59:09,045] root:DEBUG:  AMF, SMF and UPF are registered to NRF....
+[2022-01-06 11:59:09,045] root:DEBUG:  Checking if SMF is able to connect with UPF....
+[2022-01-06 11:59:09,107] root:DEBUG:  UPF did answer to N4 Association request from SMF....
+[2022-01-06 11:59:09,137] root:DEBUG:  SMF receiving heathbeats from UPF....
+[2022-01-06 11:59:09,137] root:DEBUG:  OAI 5G Core network is configured and healthy....
+
+
+Name                 Command                  State                  Ports            
+
+-----------------------------------------------------------------------------------------
+
+mysql        docker-entrypoint.sh mysqld      Up (healthy)   3306/tcp, 33060/tcp         
+
+oai-amf      /bin/bash /openair-amf/bin ...   Up (healthy)   38412/sctp, 80/tcp, 9090/tcp
+
+oai-ausf     /bin/bash /openair-ausf/bi ...   Up (healthy)   80/tcp                      
+
+oai-ext-dn   /bin/bash -c  apt update;  ...   Up                                         
+
+oai-nrf      /bin/bash /openair-nrf/bin ...   Up (healthy)   80/tcp, 9090/tcp            
+
+oai-smf      /bin/bash /openair-smf/bin ...   Up (healthy)   80/tcp, 8805/udp, 9090/tcp  
+
+oai-spgwu    /openair-spgwu-tiny/bin/en ...   Up (healthy)   2152/udp, 8805/udp          
+
+oai-udm      /bin/bash /openair-udm/bin ...   Up (healthy)   80/tcp                      
+
+oai-udr      /bin/bash /openair-udr/bin ...   Up (healthy)   80/tcp
+
+ 4. Deploying RAN Emulator
+ Executing command "docker-compose -f docker-compose-gnbsim.yaml up -d gnbsim"
+WARNING: Found orphan containers (oai-nrf, oai-spgwu, oai-amf, oai-udm, oai-ext-dn, mysql, oai-ausf, oai-smf, oai-udr) for this project. If you removed or renamed this service in your compose file, you can run this command with the --remove-orphans flag to clean it up.
+Creating gnbsim ... done
+ Executing command "sleep 5"
+ Executing command "docker exec -it oai-ext-dn ping 12.1.1.5 -c4"
+PING 12.1.1.5 (12.1.1.5) 56(84) bytes of data.
+
+
+
+                                              --- 12.1.1.5 ping statistics ---
+
+                                                                              4 packets transmitted, 0 received, 100% packet loss, time 3054ms
+                                                                                                                                           
+ Executing command "docker logs oai-smf > /tmp/oai/static-ue-ip/smf.log 2>&1"
+ Executing command "docker logs oai-nrf > /tmp/oai/static-ue-ip/nrf.log 2>&1"
+ Executing command "docker logs oai-spgwu > /tmp/oai/static-ue-ip/spgwu.log 2>&1"
+ Executing command "docker logs oai-udr > /tmp/oai/static-ue-ip/udr.log 2>&1"
+ Executing command "docker logs oai-udm > /tmp/oai/static-ue-ip/udm.log 2>&1"
+ Executing command "docker logs oai-ausf > /tmp/oai/static-ue-ip/ausf.log 2>&1"
+ Executing command "docker logs gnbsim > /tmp/oai/static-ue-ip/gnbsim.log 2>&1"
+ Executing command "docker-compose -f docker-compose-gnbsim.yaml down"
+Stopping gnbsim ... done
+WARNING: Found orphan containers (oai-ausf, oai-amf, oai-udr, oai-udm, oai-ext-dn, oai-smf, oai-nrf, mysql, oai-spgwu) for this project. If you removed or renamed this service in your compose file, you can run this command with the --remove-orphans flag to clean it up.
+Removing gnbsim ... done
+Network demo-oai-public-net is external, skipping
+ Executing command "python3 core-network.py --type stop-basic --fqdn yes --scenario 1"
+[2022-01-06 12:00:31,444] root:DEBUG:  UnDeploying OAI 5G core components....
+Stopping oai-ext-dn ... done
+Stopping oai-spgwu  ... done
+Stopping oai-smf    ... done
+Stopping oai-amf    ... done
+Stopping oai-ausf   ... done
+Stopping oai-udm    ... done
+Stopping oai-udr    ... done
+Stopping mysql      ... done
+Stopping oai-nrf    ... done
+Removing oai-ext-dn ... done
+Removing oai-spgwu  ... done
+Removing oai-smf    ... done
+Removing oai-amf    ... done
+Removing oai-ausf   ... done
+Removing oai-udm    ... done
+Removing oai-udr    ... done
+Removing mysql      ... done
+Removing oai-nrf    ... done
+Removing network demo-oai-public-net
+[2022-01-06 12:02:00,644] root:DEBUG:  OAI 5G core components are UnDeployed....
+
+
+ 5. Reference logs
+
+Final result for the tutorial DEPLOY_SA5G_BASIC_STATIC_UE_IP.md is FAIL
+Command execution summary: 
+'rm -rf /tmp/oai/static-ue-ip': 'PASS' 
+'mkdir -p /tmp/oai/static-ue-ip': 'PASS'
+"sed -i 's/USE_LOCAL_SUBSCRIPTION_INFO=yes/USE_LOCAL_SUBSCRIPTION_INFO=no/g' docker-compose-basic-nrf.yaml": 'PASS' 
+"sed -i 's/SMF_SELECTION=yes/SMF_SELECTION=no/g' docker-compose-basic-nrf.yaml": 'PASS'
+'python3 core-network.py --type start-basic --fqdn yes --scenario 1': 'PASS'
+'docker-compose -f docker-compose-gnbsim.yaml up -d gnbsim': 'PASS'
+'sleep 5': 'PASS'
+'docker exec -it oai-ext-dn ping 12.1.1.5 -c4': 'FAIL'
+'docker logs oai-amf > /tmp/oai/static-ue-ip/amf.log 2>&1': 'PASS'
+'docker logs oai-smf > /tmp/oai/static-ue-ip/smf.log 2>&1': 'PASS'
+'docker logs oai-nrf > /tmp/oai/static-ue-ip/nrf.log 2>&1': 'PASS'
+'docker logs oai-spgwu > /tmp/oai/static-ue-ip/spgwu.log 2>&1': 'PASS'
+'docker logs oai-udr > /tmp/oai/static-ue-ip/udr.log 2>&1': 'PASS'
+'docker logs oai-udm > /tmp/oai/static-ue-ip/udm.log 2>&1': 'PASS'
+'docker logs oai-ausf > /tmp/oai/static-ue-ip/ausf.log 2>&1': 'PASS'
+'docker logs gnbsim > /tmp/oai/static-ue-ip/gnbsim.log 2>&1': 'PASS'
+'docker-compose -f docker-compose-gnbsim.yaml down': 'PASS'
+'python3 core-network.py --type stop-basic --fqdn yes --scenario 1': 'PASS' 

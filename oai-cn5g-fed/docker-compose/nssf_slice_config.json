@@ -1,0 +1,144 @@
+{
+    "info": {
+       "version": "1.0.0",
+       "description": "OAI-NSSF initial local configuration"
+    },
+    "configuration": {
+       "nsiInfoList": [
+          {
+             "snssai": {
+                "sst": 2,
+                "sd": "2"
+             },
+             "nsiInformationList":{
+                   "nrfId": "http://192.168.70.136:80/nnrf-nfm/v1/nf-instances",
+                   "nsiId": "11"
+                }
+          },
+          {
+             "snssai": {
+                "sst": 3,
+                "sd": "3"
+             },
+             "nsiInformationList": {
+               "nrfId": "http://192.168.70.136:80/nnrf-nfm/v1/nf-instances",
+               "nsiId": "12"
+                }
+          },
+          {
+            "snssai": {
+               "sst": 4,
+               "sd": "4"
+            },
+            "nsiInformationList": {
+              "nrfId": "http://192.168.70.137:80/nnrf-nfm/v1/nf-instances",
+              "nsiId": "12"
+               }
+         }
+       ],
+       "taInfoList": [
+          {
+             "tai": {
+                "plmnId": {
+                   "mcc": "208",
+                   "mnc": "95"
+                },
+                "tac": "33456"
+             },
+             "supportedSnssaiList": [
+                {
+                   "sst": 222,
+                   "sd": 123
+                },
+                {
+                   "sst": 1,
+                   "sd": 2
+                },
+                {
+                   "sst": 2
+                }
+             ]
+          },
+          {
+             "tai": {
+                "plmnId": {
+                   "mcc": "208",
+                   "mnc": "92"
+                },
+                "tac": "33458"
+             },
+             "supportedSnssaiList": [
+                {
+                   "sst": 1
+                },
+                {
+                   "sst": 1,
+                   "sd": 1
+                },
+                {
+                   "sst": 1,
+                   "sd": 3
+                },
+                {
+                   "sst": 2
+                }
+             ],
+             "restrictedSnssaiList": [
+                {
+                   "homePlmnId": {
+                      "mcc": 208,
+                      "mnc": 97
+                   },
+                   "sNssaiList": [
+                      {
+                         "sst": 1,
+                         "sd": 3
+                      }
+                   ]
+                }
+             ]
+          },
+          {
+             "tai": {
+                "plmnId": {
+                   "mcc": "208",
+                   "mnc": "95"
+                },
+                "tac": "33459"
+             },
+             "supportedSnssaiList": [
+                {
+                   "sst": 1
+                },
+                {
+                   "sst": 1,
+                   "sd": 1
+                },
+                {
+                   "sst": 2
+                },
+                {
+                   "sst": 2,
+                   "sd": 1
+                }
+             ]
+          }
+       ],
+       "plmnInfoList": [
+          {
+             "operatorName": "OpenairInterface",
+             "homePlmnId": {
+                "mcc": 208,
+                "mnc": 95
+             }
+          },
+          {
+             "operatorName": "Eurecom",
+             "homePlmnId": {
+                "mcc": 208,
+                "mnc": 96
+             }
+          }
+       ]
+    }
+ }

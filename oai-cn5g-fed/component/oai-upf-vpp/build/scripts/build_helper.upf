@@ -1,0 +1,150 @@
+################################################################################
+# Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The OpenAirInterface Software Alliance licenses this file to You under
+# the OAI Public License, Version 1.1  (the "License"); you may not use this file
+# except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.openairinterface.org/?page_id=698
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#-------------------------------------------------------------------------------
+# For more information about the OpenAirInterface (OAI) Software Alliance:
+#      contact@openairinterface.org
+################################################################################
+
+# file build_helper.upf
+# brief
+# author Rohan Kharade
+#
+#######################################
+################################
+# include helper functions
+################################
+SCRIPT=$(readlink -f ${BASH_SOURCE})
+THIS_SCRIPT_PATH=`dirname $SCRIPT`
+source $THIS_SCRIPT_PATH/build_helper
+
+#-------------------------------------------------------------------------------
+#arg1 is force (0 or 1) (no interactive script)
+#arg2 is debug (0 or 1) (install debug libraries)
+check_install_vpp_upf_deps() {
+
+  if [ $1 -gt 0 ]; then
+    OPTION="-y"
+  else
+    OPTION=""
+  fi
+  if [ $2 -eq 0 ]; then
+    debug=0
+  else
+    debug=1
+  fi
+
+  echo "Check supported distribution"
+  check_supported_distribution
+  [[ $? -ne 0 ]] && return $?
+
+  # prevent lock on /var/lib/dpkg/lock
+  if [[ $OS_DISTRO == "ubuntu" ]]; then
+    #$SUDO systemctl mask apt-daily.service
+    #$SUDO systemctl mask apt-daily.timer
+    #$SUDO systemctl mask apt-daily-upgrade.service
+    #$SUDO systemctl mask apt-daily-upgrade.timer
+    $SUDO sed -i 's/1/0/g' /etc/apt/apt.conf.d/10periodic
+  fi
+
+  # Compilers, generators, ...
+  if [[ $OS_DISTRO == "ubuntu" ]]; then
+    PACKAGE_LIST="\
+      libhyperscan-dev \
+      wget \
+      make \
+      build-essential \
+      sudo \
+      gdb \
+      git"
+  elif [[ "$OS_BASEDISTRO" == "fedora" ]]; then
+    PACKAGE_LIST="\  # To Do this section
+      libhyperscan-dev \
+      wget \
+      make \
+      build-essential \
+      sudo \
+      gdb \
+      git"
+  else
+    echo_fatal "$OS_DISTRO is not a supported distribution."
+  fi
+  echo "Install build tools"
+  $SUDO $INSTALLER install $OPTION $PACKAGE_LIST
+  ret=$?;[[ $ret -ne 0 ]] && return $ret
+  
+  check_install_vpp_upf_source_deps
+
+  return 0
+}
+#-------------------------------------------------------------------------------
+
+check_install_vpp_upf_deps() {
+  echo_info "Cloning fdio VPP $OPENAIRCN_DIR/"
+  if [ -d "$OPENAIRCN_DIR/vpp" ]; then
+     echo_error "clone failed : - vpp source is already present at $OPENAIRCN_DIR/... use option -w to wipe out vpp source"  
+  fi
+  install_dep
+}
+#-------------------------------------------------------------------------------
+
+install_dep(){
+    GIT_URL=https://github.com/fdio/vpp.git
+    GIT_BRANCH=stable/2101
+    pushd $OPENAIRCN_DIR/
+    git clone -b $GIT_BRANCH $GIT_URL
+#    echo  "APT::Get::Assume-Yes "true";" >> /etc/apt/apt.conf.d/90forceyes
+#    echo  "APT::Get::force-yes "true";" >> /etc/apt/apt.conf.d/90forceyes
+    cd vpp && make install-dep
+    return 0
+}
+
+remove_vpp_source(){
+   rm -rf $OPENAIRCN_DIR/vpp/
+   echo_fatal "Removed vpp source $OPENAIRCN_DIR/vpp"
+}
+#-------------------------------------------------------------------------------
+
+add_Travelping_upf_plugin(){
+  GIT_URL=https://github.com/travelping/upg-vpp.git
+  GIT_BRANCH=master
+  echo_info "Cloning Travelping UPG plugin"
+  pushd $OPENAIRCN_DIR/
+  git clone -b $GIT_BRANCH $GIT_URL
+  cd $OPENAIRCN_DIR/upg-vpp && git checkout -f 1f047425c5c99db44c2e599ad1dfd767d426cce8
+  mkdir -p -- $OPENAIRCN_DIR/vpp/patches
+  cp -rf $OPENAIRCN_DIR/upg-vpp/upf/ $OPENAIRCN_DIR/vpp/src/plugins/
+  cp -rf $OPENAIRCN_DIR/upg-vpp/vpp-patches/* $OPENAIRCN_DIR/vpp/patches
+  rm -rf $OPENAIRCN_DIR/upg-vpp
+  apply_patches
+}
+#-------------------------------------------------------------------------------
+
+apply_patches(){
+  echo_info "Applying patches to VPP UPG"
+  cp -r $OPENAIRCN_DIR/scripts/patches/* $OPENAIRCN_DIR/vpp/patches
+  cd $OPENAIRCN_DIR/vpp/patches
+  find . -iname '*.patch' -execdir sh -c 'patch -p1 -N -d $OPENAIRCN_DIR/vpp/ < $0' {} \;
+}
+
+#-------------------------------------------------------------------------------
+vpp_upf_init(){
+  echo_info "VPP UPG initializing"
+  cp $OPENAIRCN_DIR/scripts/upf_conf/*  $OPENAIRCN_DIR/vpp
+  cp $OPENAIRCN_DIR/scripts/run.sh  $OPENAIRCN_DIR/vpp
+  echo_info "Installing VPP"
+  sudo cp -rf $OPENAIRCN_DIR/vpp/build-root/install-vpp_debug-native/vpp/lib/ /usr/lib/x86_64-linux-gnu/vpp_plugins/
+}

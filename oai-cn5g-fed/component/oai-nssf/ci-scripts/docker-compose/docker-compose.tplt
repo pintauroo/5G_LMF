@@ -1,0 +1,43 @@
+version: '3.8'
+services:        
+    cicd_oai_nssf:
+        container_name: "cicd-oai-nssf"
+        image: oai-nssf:NSSF_TAG
+        environment:
+            - INSTANCE=0
+            - TZ=Europe/Paris
+            - PID_DIRECTORY=/var/run
+            - NSSF_NAME=oai-nssf
+            - NSSF_FQDN=nssf.oai-5gcn.eur
+            - SBI_IF_NAME=eth0
+            - SBI_PORT=80
+            - SBI_API_VERSION=v1
+            - SBI_PORT_HTTP1=80
+            - SBI_PORT_HTTP2=8080
+            - NSSF_SLICE_CONFIG=/openair-nssf/etc/nssf_slice_config.json
+        cap_add:
+            - NET_ADMIN
+            - SYS_ADMIN
+        cap_drop:
+            - ALL
+        privileged: true
+        networks:
+            public_net:
+                ipv4_address: 192.168.70.134
+        volumes:
+            - ./nssf-healthy-check.sh:/openair-nssf/bin/nssf-healthy-check.sh
+        healthcheck:
+            test: /bin/bash -c "/openair-nssf/bin/nssf-healthy-check.sh"
+            interval: 10s
+            timeout: 5s
+            retries: 5
+
+networks:
+    public_net:
+        driver: bridge
+        name: demo-oai-public-net
+        ipam:
+            config:
+                - subnet: 192.168.70.128/26
+        driver_opts:
+            com.docker.network.bridge.name: "demo-oai"
